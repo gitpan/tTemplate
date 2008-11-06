@@ -1,4 +1,5 @@
-abstract: ~
+abstract: "text base template expand module\r"
+author: "tateisu C<tateisu@gmail.com >\r"
 build_requires:
   Test::More: 0
 distribution_type: module
@@ -11,4 +12,4 @@ no_index:
     - t
 requires:
   perl: 5.8.3
-version: 0.1.9
+version: 0.1.10

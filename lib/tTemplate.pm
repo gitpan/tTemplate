@@ -1,11 +1,11 @@
-#!perl
+#!perl --
 package tTemplate;
 use utf8;
 use strict;
 use warnings;
 use Encode;
 use Carp;
-our $VERSION = "0.1.9";
+our $VERSION = "0.1.10";
 
 sub getDataType($){
 	# return empty string if not reference type.
@@ -62,7 +62,7 @@ our %filter_map =(
 );
 
 {
-	package ExprParser;
+	package tTemplate::ExprParser;
 	use Carp;
 	our @ExprOperator;
 	our %ExprOperator;
@@ -324,7 +324,7 @@ our %filter_map =(
 	}
 
 	{
-		package ExprNode;
+		package tTemplate::ExprNode;
 		sub new{
 			my($class,$op,$text)=@_;
 			if(not ref $op){
@@ -361,15 +361,15 @@ our %filter_map =(
 		}
 		sub _eval{
 			my($self)=@_;
-			my @args = map{ ref($_) ? $_->_eval() : $ExprParser::dataset->token2path($_) } @{$self->{args}};
+			my @args = map{ ref($_) ? $_->_eval() : $tTemplate::ExprParser::dataset->token2path($_) } @{$self->{args}};
 			my $r = ($self->{realop} || $self->{op})->{_eval}(@args);
 			return $r;
 		}
 		sub eval{
 			my($self,$dataset)=@_;
-			local $ExprParser::dataset = $dataset;
+			local $tTemplate::ExprParser::dataset = $dataset;
 			my $r = CORE::eval{ $self->_eval();};
-			$@ and return ['i',"[Error: $@ in ".$self->toString."]"];
+			$@ and return ['i',"[Error: $@ in ".$self->toString." in tTemplate::ExprNode::eval]"];
 			return $r;
 		}
 	}
@@ -428,7 +428,7 @@ our %filter_map =(
 
 		my $self = bless{
 			allow_child => 1,
-			stack=>[new ExprNode('')],
+			stack=>[new tTemplate::ExprNode('')],
 			token=>$list,
 		};
 
@@ -460,7 +460,7 @@ our %filter_map =(
 						$verbose>0 and warn "start of term $token(?) \n";
 						shift @{$self->{token}};
 						shift @{$self->{token}};
-						$node =  new ExprNode(findOp('(',qr/a/));
+						$node =  new tTemplate::ExprNode(findOp('(',qr/a/));
 						$target->addArg($node);
 						unshift @{$self->{stack}},$node;
 						$self->{allow_child} = 1;
@@ -471,7 +471,7 @@ our %filter_map =(
 					# unary left or '('
 					$verbose>0 and warn "operator $token start\n";
 					shift @{$self->{token}};
-					$node =  new ExprNode($op);
+					$node =  new tTemplate::ExprNode($op);
 					$target->addArg($node);
 					unshift @{$self->{stack}},$node;
 					$self->{allow_child} = 1;
@@ -489,7 +489,7 @@ our %filter_map =(
 					$token = $self->peekToken;
 					if( defined($token) and $token =~/^["\w\d_]/ and $old_arg =~/^\$/ ){
 						$verbose>0 and warn "merge '$old_arg' and '$token'\n";
-						$node =  new ExprNode(findOp('.',qr/[armtk]/));
+						$node =  new tTemplate::ExprNode(findOp('.',qr/[armtk]/));
 						$target->{args}[-1] = $node;
 						$node->addArg($old_arg,$token);
 						shift @{$self->{token}};
@@ -500,7 +500,7 @@ our %filter_map =(
 
 				$op = findOp($token,qr/[armtk]/);
 				if($op){
-					$node = new ExprNode($op);
+					$node = new tTemplate::ExprNode($op);
 					my $a;
 					while(@{$self->{stack}}){
 						my($left,$right) =($target->{op},$op);
@@ -543,7 +543,7 @@ our %filter_map =(
 						}
 
 						if( not $self->reduce("left combination $target->{op}->{key1} $op->{key1}") ){
-							warn "reduce failed: ",Data::Dumper::Dumper($target),"\n";
+						#	warn "reduce failed: ",Data::Dumper::Dumper($target),"\n";
 							die "cannot resolve operator precedence between '$target->{op}->{key1}' and '$op->{key1}'\n";
 						}
 						$target=$self->{stack}[0];
@@ -561,7 +561,8 @@ our %filter_map =(
 }
 
 {
-	package Dataset;
+	package tTemplate::Dataset;
+
 	*getDataType = \&tTemplate::getDataType;
 	*decodeQuote  = \&tTemplate::decodeQuote;
 
@@ -765,28 +766,28 @@ sub parseError{
 
 sub parseExpr{
 	my($self,$list)=@_;
-	my $r = eval{ ExprParser::parse($list);};
+	my $r = eval{ tTemplate::ExprParser::parse($list);};
 	$@ and $self->parseError($@);
 	return $r;
 }
 
 sub evalExpr{
 	my($tmpl,$tag,$expr)=@_;
-	my $dataset = new Dataset($tmpl,$tag);
+	my $dataset = new tTemplate::Dataset($tmpl,$tag);
 	my $r = eval{ $dataset->getV( $expr->eval($dataset) );};
 	if($@){
-		$r = "[Error: $@]";
+		$r = "[Error: $@ in evalExpr]";
 		$r =~s/[\x0d\x0a]+//g;
 	}
 	return $r;
 }
 sub evalExprList{
 	my($tmpl,$tag,$expr)=@_;
-	my $dataset = new Dataset($tmpl,$tag);
+	my $dataset = new tTemplate::Dataset($tmpl,$tag);
 	my @list;
 	eval{ $dataset->getVlist( \@list,$expr->eval($dataset) ); };
 	if($@){
-		my $r = "[Error: $@]";
+		my $r = "[Error: $@ in evalExprList]";
 		$r =~s/[\x0d\x0a]+//g;
 		return $r;
 	}
@@ -794,10 +795,10 @@ sub evalExprList{
 }
 sub evalExprKw{
 	my($tmpl,$tag,$expr)=@_;
-	my $dataset = new Dataset($tmpl,$tag);
+	my $dataset = new tTemplate::Dataset($tmpl,$tag);
 	my $path = eval{ $expr->eval($dataset); };
 	if($@){
-		my $r = "[Error: $@]";
+		my $r = "[Error: $@ in evalExprKw]";
 		$r =~s/[\x0d\x0a]+//g;
 		return $r;
 	}
@@ -806,7 +807,7 @@ sub evalExprKw{
 
 	my $v = eval{ $dataset->getV( $path );};
 	if($@){
-		my $r = "[Error: $@]";
+		my $r = "[Error: $@ in evalExprKw]";
 		$r =~s/[\x0d\x0a]+//g;
 		return $r;
 	}
@@ -817,11 +818,11 @@ sub evalExprKw{
 
 sub setExprValue{
 	my($tmpl,$tag,$expr,$newval)=@_;
-	my $dataset = new Dataset($tmpl,$tag);
+	my $dataset = new tTemplate::Dataset($tmpl,$tag);
 	my $path = $expr->eval($dataset);
 	my $r = eval{ $dataset->setV($path,$newval);};
 	if($@){
-		$r = "[Error: $@]";
+		$r = "[Error: $@ in setExprValue]";
 		$r =~s/[\x0d\x0a]+//g;
 	}
 	return $r;
@@ -1004,7 +1005,7 @@ sub parseTemplateTag{
 	my($self,$text)=@_;
 
 	# split to token list
-	my @list = $text =~ /$ExprParser::token_re|"(?:[^"]|"")*"|[\w_]+|\p{IsWord}+/g;
+	my @list = $text =~ /$tTemplate::ExprParser::token_re|"(?:[^"]|"")*"|[\w_]+|\p{IsWord}+/g;
 	@list or die $self->parseError("empty template tag");
 	
 	# parse filter
@@ -1402,3 +1403,487 @@ sub toString{
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+tTemplate - text base template expand module
+
+=head1 SYNOPSIS
+
+	use utf8;
+	use Encode;
+	use tTemplate;
+
+	# create instance
+	my $tmpl = new tTemplate();
+
+	# load from file
+	$tmpl->loadFile('template.html','utf8') or die $tmpl->error;
+
+	# or load from text
+	$tmpl->loadText('src1','hello, ${world}!','utf8') or die $tmpl->error;
+
+	# prepare binding parameter
+	my $param = { world=>'World' };
+
+	# set default filter that used when output parameter or expression
+	$tmpl->filter_default('html');
+
+	# set encoding that used when read non-utf8 value from parameter.
+	$tmpl->param_encoding('cp932');
+
+	# set string that used for print instead of undefined value.
+	$tmpl->undef_supply('(null)');
+
+	# print to filehandle
+	$tmpl->print($param,\*STDOUT,'utf8');
+
+	# or get string output
+	print Encode::encode('utf8',$tmpl->toString($param));
+
+=head1 DESCRIPTION
+
+The C<tTemplate> module is text base template expand module.
+This module compile control tag in source text and output it with parameter data that gived at runtime.
+Its main purpose is handling HTML templates in Web Application,
+but it also available for other situation such as mail,XML,etc,.
+
+=head1 FEATURE
+
+=over
+
+=item * 
+
+requires perl >= 5.8.3.
+
+=item * 
+
+no extra dependency.
+
+=item * 
+
+unicode support. it works correctly on 'use utf8;' situation.
+you can apply different character encoding for source, output, and reading non-utf8 peremeter.
+
+=item * 
+
+looks of control tags are ${...} or ${%...}
+
+=item * 
+
+types of control tag are: print, if-elsif-else-end, for-end, while-end, eval, blockdefine, blockpaste.
+
+=item * 
+
+this module supports various expressions in control tags.
+
+=item *
+
+escape filter support. also programmer can specify default filter for tags that fileter was abbreviated.
+
+=back
+
+=head1 TEMPLATE SYNTAX 
+
+=head2 control tag
+
+ ${ [label:] [% tagtype] tag-arg [;[label:] [% tagtype] tag-arg ...] [#filter]}
+
+=over
+
+=item *
+
+in text of template source, looks of control tag is ${...}.
+
+=item *
+
+if you want to write ${ as normal text , please escape it to $${ .
+
+=item *
+
+tokens in control tag are:
+
+=over 3
+
+=item **
+
+keyword that start with alphabet and underbar and follows alphabet,underbar,numeric.
+
+=item **
+
+"double quoted string" . if you want to write " in quoted string , please escape it to "".
+
+=item **
+
+numeric constant. (integer only. '.' is not supported)
+
+=item **
+
+any symbols except '}' and '"'
+
+=back
+
+=item * 
+
+to specify escape filter, use  '#I<filtername>' in end of tags.
+I<filtername> is one of B<raw>,B<html>,B<uri>,B<nobr>.
+if you omit filter spec in tag, default filter that specified by program as $tmpl->filter_default('html'); is applied.
+
+=item * 
+
+you can write a number of control statement in a tag. each control statement is separated by ';' .
+
+=item * 
+
+type of control statement is specified as I<%command> in head of statement ( excepts label if exists.).
+if you omit I<%command>, B<%print> is supplied.
+
+=item * 
+
+you can add I<label:> at head of control statement (before %).
+this is used for B<break> and B<continue>.
+
+=item *
+
+if line of source text contains only whitespaces control tag excepts B<%print>, spaces and linefeed in the line is removed at compiling source.
+
+=back
+
+=head2 expression
+
+you may use expression in control statement such as B<print>,B<eval>,B<for>,B<if> to reference data in parameter object.
+supported operator and literarls are:
+
+=over
+
+=item almost same as perl:
+
+B<()>
+B<++>
+B<-->
+B<**>
+B<!>
+B<~>
+B<unary+>
+B<unary->
+B<*>
+B</>
+B<%>
+B<+>
+B<->
+B<E<lt>E<lt>>
+B<E<gt>E<gt>>
+B<int>
+B<defined>
+B<length>
+B<E<lt>>
+B<E<gt>>
+B<E<lt>=>
+B<E<gt>=>
+B<lt>
+B<gt>
+B<le>
+B<ge>
+B<==>
+B<!=>
+B<E<lt>=E<gt>>
+B<eq>
+B<ne>
+B<cmp>
+B<eq>
+B<ne>
+B<cmp>
+B<&>
+B<|>
+B<^>
+B<&&>
+B<||>
+B<//>
+B<?:>
+B<=>
+B<**=>
+B<*=>
+B</=>
+B<%=>
+B<+=>
+B<-=>
+B<E<lt>E<lt>=>
+B<E<gt>E<gt>=>
+B<&=>
+B<|=>
+B<^=>
+B<&&=>
+B<||=>
+B<//=>
+B<,>
+B<print>
+B<scalar>
+B<join>
+B<push>
+B<pop>
+B<shift>
+B<unshift>
+B<not>
+B<and>
+B<or>
+B<xor>
+
+=item notation is changed from perl:
+
+=over
+
+=item
+
+B<cat> (same as . in perl)
+
+=item
+
+B<repeat> (same as x in perl)
+
+=item
+
+B<makearray> (same as [] in perl)
+
+=item
+
+B<makehash> (same as {} in perl)
+
+=back
+
+=item other operators:
+
+=over
+
+=item
+
+B<bool> (same as not not )
+
+=item
+
+B<nz> (same as !=0 ) 
+
+=item
+
+B<call> coderef,args... (same as  coderef->(args,...) in perl)
+
+=item
+
+B<call> obj,"method",args... (same as  obj->"method"(args,...) in perl)
+
+=back
+
+=item literal:
+
+=over 3
+
+=item *
+
+keyword that start with alphabet and underbar and follows alphabet,underbar,numeric.
+
+=item *
+
+"double quoted string" . if you want to write " in quoted string , please escape it to "".
+
+=item *
+
+numeric constant. (integer only. '.' is not supported)
+
+=back
+
+=back
+
+=head3 expression for data reference 
+
+	# for example, the parameter data structure that passed to template is this:
+	$VAR1 = {
+		h=>{ a=>1,b=>2,c=>3, ge=>4},
+		v=>['a','b','c','d'],
+		ge => 4,
+		ge => 4,
+	}
+	#then data reference and its value is:
+	h.c     => means 3
+	v.1     => means 'b'
+	v.(1+2) => means 'd'
+	h[v.1]  => means  2  
+	v[h.c]  => means 'd' 
+	ge      => error.  because 'ge' is operator, not keyword.
+	$ge     => means 4. using $ to change interpret of keyword and operator.
+	h["ge"] => means 4. using [] to avoid interpret of keyword and operator.
+
+looks of expression for data reference are like as name , name.key , name[2].key , $name.
+each node that separated by . and [] indicate hash-key or array-index in parameter data structure.
+
+=over
+
+=item a[b]
+
+reference hash-key or array-index of a by value of b.
+left term must be data reference.
+
+=item a.b
+
+reference hash-key or array-index of a by keyowrd of b.
+left term must be data reference.
+if right term is keyword , use its name  as key or index. 
+if right term is not keyword, use its value as key or index. 
+if each term is data reference , concat the data path.
+
+=item $
+
+symbol $ is reference to whole of parameter data.
+and you can use $keyword to avoid conflict between keyword and operator .
+
+=item $$
+
+symbol $$ is reference to whole of template object.
+
+=back
+
+=head4 examples
+
+	${v}            # referencde parameter data by key 'v'.
+	${"v"}          # string constant. not reference parameter data.
+	${2}            # numeric constant.not reference parameter data.
+	${va[2]}        # reffernce array by numeric subscript .
+	${va[-1]}       # negative subscript to reference end of array.
+	${va[v2]}       # use value of another data as subscript index of array.
+	${vh["v2"]}     # use string constatnt  to subscript key of hash.
+	${vh.v2}        # use keyword name      in right term of '.'
+	${va.-1}        # use expression value  in right term of '.'
+	${va.(1+2)}     # use expression value  in right term of '.'
+	${vh."v2"}      # use string  constatnt in right term of '.'
+	${va.2}         # use integer constatnt in right term of '.'
+	${va.v3}        # same as 'va.0'. if left term is array,keyword of right term is interpolated in numeric context.
+	${vh.(va.2)}    # same as 'vh.va.2'. if term is data reference, each path willbe concat.
+	${$2.2}         # example of using $ in data reference
+	${$.2.2}        # example of using $ in data reference
+	${$[2].2}       # example of using $ in data reference
+	${$defined}     # keyword after $/$$ is interpolated as dara reference although its looks is operator.
+	${$"defined"}   # constant literal after $/$$ is interpolated as dara reference.
+	${$.defined }   # Error. bare 'defined' is interpolated as operator.
+
+=head2 %print
+
+ Syntax:
+	${ [%print] expr }
+ Examples:
+	${1,2,3}
+	${client.5.address}
+	${client[loopcount].address}
+	${ "売り上げ"."合計" }
+	${user.phone||"not available"}
+	${user.mobile?"携帯ユーザ":"PCユーザ"}
+	E<lt>a href="?who=${data#uri}"E<gt>${data#nobr}E<lt>/aE<gt>
+	E<lt>textarea name="a"E<gt>${body#nobr}E<lt>/textareaE<gt>
+
+Print expression to place of control tag.
+And you can omit part of '%print' in tag, such as ${expr}.
+
+=head2 %eval
+
+ Syntax:
+	${%eval expr}
+ Examples:
+	${%eval name="foo",caption="bar"}
+
+Eval expression, but not print to outout.
+Also you can use operator 'print' in this tag.
+
+=head2 %evalperl
+
+ Syntax:
+	${%evalperl "perlcode" [result [arg [arg ...]]] }
+
+You can write perl code in "perlcode". please quote it.
+If you specify data reference at 'result', result of eval is stored to it.
+If you specify data reference at 'arg', its value willbe copied to local variable $a,$b,... brfore eval.
+reference of parameter object is copied to local variable $_ before eval.
+
+=head2 %if,%elsif,%else,%end,%ifc,%elsifc
+
+ Syntax:
+	${ [label:] %if expr } or ${ [label:] %ifc    "perlcode" [arg [arg ...]] }
+		block
+	${%elsif expr }or ${%elsifc "perlcode" [arg [arg ...]] }
+		block
+	${%else}
+		block
+	${%end}
+
+=head2 %for
+
+ Syntax:
+	${ [label:] %for item in array [index] [indexstart] }
+		block
+	${%end}
+
+I<item> must have LValue.
+
+I<array> must have array reference.
+
+I<index> can be omit, or must have LValue.
+
+I<indexstart> can be omit, or must have numeric value.
+
+loops for each element of I<array>.
+
+in the loop, element of index are copied to I<item> and I<index>.
+
+If I<indexstart> is specified, initial value of I<index> will be changed.
+
+=head2 %while
+
+ Syntax:
+	${ [label:] %while
+	    [init init_expr]
+	    [precheck precheck_expr]
+	    [postcheck postcheck_expr]
+	    [step step_expr]
+	    [final final_expr]
+	}
+		block
+	${%end}
+ 
+ Examples:
+	${%while init i=0 precheck i<10 step i++} ${i} ${%end}
+	${%while init i=0 postcheck i<10 step i++} ${i} ${%end}
+	${%while precheck left-- } ...  ${%end}
+	${%while postcheck --left} ...  ${%end}
+ 
+ pseudo code to explain timing of evaluate each expression 
+	(init_expr);
+	loop{
+		if(!precheck_expr) break;
+		block
+	_CONTINUE:
+		if(!postcheck_expr) break;
+		(step_expr);
+	}
+	_BREAK:
+	(final_expr);
+
+=head2 %break,%continue
+
+ Syntax:
+	${%break [label] }
+	${%continue [label] }
+
+These tags are used to exit block.
+
+=head2 %blockdefine,%blockpaste
+
+ Syntax:
+	${%blockdefine blockname }
+		...
+	${%end}
+	
+	${%blockpaste blockname }
+
+=head1 AUTHOR
+
+tateisu C<tateisu@gmail.com >
+
+=cut

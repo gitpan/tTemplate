@@ -33,11 +33,3 @@ Revision history for Perl extension tTemplate
 0.1.2 08/10/27(月) 20:29:21
 	- cpanize this module. thanks for pmsetup http://bulknews.net/lib/utils/pmsetup/ by Tatsuhiko Miyagawa.
 
-0.1.1 08/10/27(月)
-	- dataspecとifをevalを強化した。あとしばらくは記法が安定しないだろう…。
-
-0.1.0 08/10/26
-	ひさしぶりにWebアプリを書こうとしたら世界が変わっていた。
-	既に誰かがいいものを書いているだろうと思ったらそうでもなかったので、自分で書き直すことにした。
-	大昔にもテンプレートエンジンを書いた記憶があるが、Unicode対応ではなかったし記法もこなれていなかった。
-	デフォルトhtmlエスケープと三項展開は個人的には必須だったのでそれは残しつつ、他の部分を強化してみた。
